@@ -48,24 +48,30 @@ char text_message[] = "test";      //
 AnalogQWERTY keyboard;
 String command, response;
 
-bool refresh;
+bool refresh, entryMode;
 
 enum {
   MENUITEM_MESSAGES = 0,
   MENUITEM_CONTACTS,
   MENUITEM_SETTINGS,
   MENUITEM_MESSAGE_NEW,
+  MENUITEM_NEWMSG_RECIPIENT,
+  MENUITEM_NEWMSG_BODY,
+  MENUITEM_NEWMSG_SEND,
   MENUITEM_BACK
 };
 
 enum {
   ACTION_LOAD_MESSAGES = 0,
-  ACTION_BACK
+  ACTION_NEW_MESSAGE,
+  ACTION_BACK,
+  ACTION_ENTRY,
+  ACTION_SEND
 };
 
 struct MenuItem {
   char* label;
-  int id, action;
+  int id, action, size;
 };
 
 struct Contact {
@@ -90,18 +96,27 @@ Contact contacts[] = {
 };
 
 MenuItem MENU_MAIN[] = {
-  { .label = "Messages", MENUITEM_MESSAGES, ACTION_LOAD_MESSAGES },
-  { .label = "Contacts", MENUITEM_CONTACTS, 0 },
-  { .label = "Settings", MENUITEM_SETTINGS, 0 }
+  { .label = "Messages", MENUITEM_MESSAGES, ACTION_LOAD_MESSAGES, 2 },
+  { .label = "Contacts", MENUITEM_CONTACTS, 0, 2 },
+  { .label = "Settings", MENUITEM_SETTINGS, 0, 2 }
 };
 
 MenuItem MENU_MESSAGES[] = {
-  { .label = "Back", MENUITEM_BACK, ACTION_BACK},
-  { .label = "New SMS", MENUITEM_MESSAGE_NEW, 0}
+  { .label = "Back", MENUITEM_BACK, ACTION_BACK, 2},
+  { .label = "New SMS", MENUITEM_MESSAGE_NEW, ACTION_NEW_MESSAGE, 2}
+};
+
+MenuItem MENU_NEWMESSAGE[] = {
+  { .label = "Recipient", MENUITEM_NEWMSG_RECIPIENT, ACTION_ENTRY, 1},
+  { .label = "Message", MENUITEM_NEWMSG_BODY, ACTION_ENTRY, 1},
+  { .label = "Cancel", MENUITEM_BACK, ACTION_BACK, 2},
+  { .label = "Send", MENUITEM_NEWMSG_SEND, ACTION_SEND, 2}
 };
 
 MenuItem * menu;
 int menu_index, menu_max;
+char entry[256]; // SMS supposably has a 160 character limit anyway
+int pos; // cursor position
 
 void setup() {
 
@@ -118,6 +133,8 @@ void setup() {
   command = String("");
   response = String(F("error"));
   refresh = true; 
+  entryMode = false;
+  pos = 0;
 
   // display init
    // SSD1306_SWITCHCAPVCC = generate display voltage from 3.3V internally
@@ -148,7 +165,6 @@ void loadMenu(MenuItem* newmenu, int num_items) {
   menu_index = 0;
   menu_max = num_items;
   refresh = true;
-  Serial.println(num_items);
 }
 
 void loop() {
@@ -158,10 +174,28 @@ void loop() {
   int dpad = (digitalRead(BTN_LEFT) << 2) | (digitalRead(BTN_OK) << 1) | digitalRead(BTN_RIGHT);
   char key = keyboard.getKeyPress();
 
-  if(dpad > 0) { 
-    String dbg = "dpad = ";
-    dbg += dpad;
+  if(dpad > 0) {
+    if(entryMode) {
+      // fix me - needs to copy label not reference it
+      menu[menu_index].label = &entry[0];
+      entryMode = false;
+    }
     handleDPad(dpad);
+  }
+
+  if(entryMode) {
+    Serial.print(pos);
+    if(key == RETURN_KEY) {
+      entry[pos++] = '\n';
+    } else if (key == DELETE_KEY) {
+      if(pos > 0) {
+        pos--;
+      }
+      entry[pos] = '\0';
+    } else if (key != NULL) {
+      entry[pos++] = key;
+    }
+    refresh = true;
   }
 
   paint();  
@@ -184,9 +218,22 @@ void handleDPad(int dpad_flags) {
         loadMenu(MENU_MESSAGES, LENGTH(MENU_MESSAGES));
         break;
       }
+      case ACTION_NEW_MESSAGE:
+      {
+        loadMenu(MENU_NEWMESSAGE, LENGTH(MENU_NEWMESSAGE));
+        break;
+      }
       case ACTION_BACK:
       {
         loadMenu(MENU_MAIN, LENGTH(MENU_MAIN));
+        break;
+      }
+      case ACTION_ENTRY:
+      {
+        // clear field for entry
+        entry[0] = '\0';
+        entryMode = true;
+        pos = 0;
         break;
       }
       default:
@@ -199,21 +246,22 @@ void paint() {
   if(refresh) {
     // Clear the buffer
     display.clearDisplay();
-    display.setTextSize(2);
     display.setCursor(0, 0);
 
     for(int i = 0; i < menu_max; i++) {
+      char * temp = (!entryMode || !i == menu_index) ? menu[i].label : &entry[0];
+      display.setTextSize(menu[i].size);
       if(i == menu_index) {
         // highlight selection
         int16_t x,y;
         uint16_t w,h;
-        display.getTextBounds(menu[i].label, 0, 0, &x, &y, &w, &h);
+        display.getTextBounds(temp, 0, 0, &x, &y, &w, &h);
         display.fillRect(display.getCursorX(), display.getCursorY(), w, h, SSD1306_WHITE);
         display.setTextColor(SSD1306_BLACK);
       } else {
         display.setTextColor(SSD1306_WHITE);
       }
-      display.println(menu[i].label);
+      display.println(temp);
     }
     display.display();
     refresh = false;
