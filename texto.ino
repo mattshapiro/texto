@@ -32,14 +32,16 @@ int KEYBOARD_PINS[] = { PA0, PA1, PA2 };
 int KEYBOARD_PINS[] = { A0, A1, A2 };
 #define POWERKEY 2
 #define LEDPIN 13
-#define BTN_LEFT PB12
-#define BTN_OK PB13
-#define BTN_RIGHT PB14
+#define BTN_LEFT ?
+#define BTN_OK ?
+#define BTN_RIGHT ?
 #endif
 
 #define DPAD_LEFT 4
 #define DPAD_OK 2
 #define DPAD_RIGHT 1
+
+#define ENTRY_BUFFER 256
 
 
 char phone_number[] = "**********";      //********** change it to the phone number you want to call
@@ -91,31 +93,32 @@ struct Thread {
 };
 
 Contact contacts[] = {
-  { .name = "Me", .number = "+xxxxxxxxxxx"},
-  { .name = "Dawn", .number = "+xxxxxxxxxxx"}
+  { .name = "Me\0", .number = "+xxxxxxxxxxx"},
+  { .name = "Dawn\0", .number = "+xxxxxxxxxxx"}
 };
 
 MenuItem MENU_MAIN[] = {
-  { .label = "Messages", MENUITEM_MESSAGES, ACTION_LOAD_MESSAGES, 2 },
-  { .label = "Contacts", MENUITEM_CONTACTS, 0, 2 },
-  { .label = "Settings", MENUITEM_SETTINGS, 0, 2 }
+  { .label = "Messages\0", MENUITEM_MESSAGES, ACTION_LOAD_MESSAGES, 2 },
+  { .label = "Contacts\0", MENUITEM_CONTACTS, 0, 2 },
+  { .label = "Settings\0", MENUITEM_SETTINGS, 0, 2 }
 };
 
 MenuItem MENU_MESSAGES[] = {
-  { .label = "Back", MENUITEM_BACK, ACTION_BACK, 2},
-  { .label = "New SMS", MENUITEM_MESSAGE_NEW, ACTION_NEW_MESSAGE, 2}
+  { .label = "Back\0", MENUITEM_BACK, ACTION_BACK, 2},
+  { .label = "New SMS\0", MENUITEM_MESSAGE_NEW, ACTION_NEW_MESSAGE, 2}
 };
 
 MenuItem MENU_NEWMESSAGE[] = {
-  { .label = "Recipient", MENUITEM_NEWMSG_RECIPIENT, ACTION_ENTRY, 1},
-  { .label = "Message", MENUITEM_NEWMSG_BODY, ACTION_ENTRY, 1},
+  { .label = NULL, MENUITEM_NEWMSG_RECIPIENT, ACTION_ENTRY, 1},
+  { .label = NULL, MENUITEM_NEWMSG_BODY, ACTION_ENTRY, 1},
   { .label = "Cancel", MENUITEM_BACK, ACTION_BACK, 2},
   { .label = "Send", MENUITEM_NEWMSG_SEND, ACTION_SEND, 2}
 };
 
+
 MenuItem * menu;
 int menu_index, menu_max;
-char entry[256]; // SMS supposably has a 160 character limit anyway
+char entry[ENTRY_BUFFER]; // SMS supposably has a 160 character limit anyway
 int pos; // cursor position
 
 void setup() {
@@ -135,6 +138,14 @@ void setup() {
   refresh = true; 
   entryMode = false;
   pos = 0;
+
+  // input initialization
+  // new message inputs
+  MENU_NEWMESSAGE[0].label = (char*)malloc(ENTRY_BUFFER * sizeof(char));
+  MENU_NEWMESSAGE[0].label = "Recipient\0";
+
+  MENU_NEWMESSAGE[1].label = (char*)malloc(ENTRY_BUFFER * sizeof(char));
+  MENU_NEWMESSAGE[1].label = "Message\0";
 
   // display init
    // SSD1306_SWITCHCAPVCC = generate display voltage from 3.3V internally
@@ -176,15 +187,17 @@ void loop() {
 
   if(dpad > 0) {
     if(entryMode) {
-      // fix me - needs to copy label not reference it
-      menu[menu_index].label = &entry[0];
+      int len = strlen(entry);
+      int size = len * sizeof(char);
+      menu[menu_index].label = (char*)malloc(size);
+      strcpy(menu[menu_index].label, entry);
+      menu[menu_index].label[size] = '\0';
       entryMode = false;
     }
     handleDPad(dpad);
   }
 
   if(entryMode) {
-    Serial.print(pos);
     if(key == RETURN_KEY) {
       entry[pos++] = '\n';
     } else if (key == DELETE_KEY) {
@@ -202,16 +215,14 @@ void loop() {
 }
 
 void handleDPad(int dpad_flags) {
+  refresh = true;
   if((dpad_flags & DPAD_LEFT) != 0) {
-    refresh = true;
     menu_index = menu_index-1 >= 0 ? menu_index-1 : menu_max-1;
   }
   if((dpad_flags & DPAD_RIGHT) != 0) {
-    refresh = true;
     menu_index = menu_index+1 < menu_max ? menu_index+1 : 0;
   }
   if((dpad_flags & DPAD_OK) != 0) {
-    refresh = true;
     switch(menu[menu_index].action) {
       case ACTION_LOAD_MESSAGES:
       {
@@ -231,7 +242,7 @@ void handleDPad(int dpad_flags) {
       case ACTION_ENTRY:
       {
         // clear field for entry
-        entry[0] = '\0';
+        memset(entry, '\0', LENGTH(entry));
         entryMode = true;
         pos = 0;
         break;
@@ -249,7 +260,7 @@ void paint() {
     display.setCursor(0, 0);
 
     for(int i = 0; i < menu_max; i++) {
-      char * temp = (!entryMode || !i == menu_index) ? menu[i].label : &entry[0];
+      char * temp = (!entryMode || i != menu_index) ? menu[i].label : &entry[0];
       display.setTextSize(menu[i].size);
       if(i == menu_index) {
         // highlight selection
