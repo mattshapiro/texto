@@ -142,10 +142,10 @@ void setup() {
   // input initialization
   // new message inputs
   MENU_NEWMESSAGE[0].label = (char*)malloc(ENTRY_BUFFER * sizeof(char));
-  MENU_NEWMESSAGE[0].label = "Recipient\0";
+  strcpy(MENU_NEWMESSAGE[0].label, "Recipient\0");
 
   MENU_NEWMESSAGE[1].label = (char*)malloc(ENTRY_BUFFER * sizeof(char));
-  MENU_NEWMESSAGE[1].label = "Message\0";
+  strcpy(MENU_NEWMESSAGE[1].label, "Message\0");
 
   // display init
    // SSD1306_SWITCHCAPVCC = generate display voltage from 3.3V internally
@@ -187,11 +187,7 @@ void loop() {
 
   if(dpad > 0) {
     if(entryMode) {
-      int len = strlen(entry);
-      int size = len * sizeof(char);
-      menu[menu_index].label = (char*)malloc(size);
       strcpy(menu[menu_index].label, entry);
-      menu[menu_index].label[size] = '\0';
       entryMode = false;
     }
     handleDPad(dpad);
