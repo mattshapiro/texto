@@ -43,6 +43,9 @@ int KEYBOARD_PINS[] = { A0, A1, A2 };
 
 #define ENTRY_BUFFER 256
 
+#define STRING_RECIPIENT  "Recipient"
+#define STRING_MESSAGE    "Message"
+
 
 char phone_number[] = "**********";      //********** change it to the phone number you want to call
 char text_message[] = "test";      //
@@ -93,19 +96,19 @@ struct Thread {
 };
 
 Contact contacts[] = {
-  { .name = "Me\0", .number = "+xxxxxxxxxxx"},
-  { .name = "Dawn\0", .number = "+xxxxxxxxxxx"}
+  { .name = "Me", .number = "+xxxxxxxxxxx"},
+  { .name = "Dawn", .number = "+xxxxxxxxxxx"}
 };
 
 MenuItem MENU_MAIN[] = {
-  { .label = "Messages\0", MENUITEM_MESSAGES, ACTION_LOAD_MESSAGES, 2 },
-  { .label = "Contacts\0", MENUITEM_CONTACTS, 0, 2 },
-  { .label = "Settings\0", MENUITEM_SETTINGS, 0, 2 }
+  { .label = "Messages", MENUITEM_MESSAGES, ACTION_LOAD_MESSAGES, 2 },
+  { .label = "Contacts", MENUITEM_CONTACTS, 0, 2 },
+  { .label = "Settings", MENUITEM_SETTINGS, 0, 2 }
 };
 
 MenuItem MENU_MESSAGES[] = {
-  { .label = "Back\0", MENUITEM_BACK, ACTION_BACK, 2},
-  { .label = "New SMS\0", MENUITEM_MESSAGE_NEW, ACTION_NEW_MESSAGE, 2}
+  { .label = "Back", MENUITEM_BACK, ACTION_BACK, 2},
+  { .label = "New SMS", MENUITEM_MESSAGE_NEW, ACTION_NEW_MESSAGE, 2}
 };
 
 MenuItem MENU_NEWMESSAGE[] = {
@@ -142,10 +145,10 @@ void setup() {
   // input initialization
   // new message inputs
   MENU_NEWMESSAGE[0].label = (char*)malloc(ENTRY_BUFFER * sizeof(char));
-  strcpy(MENU_NEWMESSAGE[0].label, "Recipient\0");
+  strcpy(MENU_NEWMESSAGE[0].label, STRING_RECIPIENT);
 
   MENU_NEWMESSAGE[1].label = (char*)malloc(ENTRY_BUFFER * sizeof(char));
-  strcpy(MENU_NEWMESSAGE[1].label, "Message\0");
+  strcpy(MENU_NEWMESSAGE[1].label, STRING_MESSAGE);
 
   // display init
    // SSD1306_SWITCHCAPVCC = generate display voltage from 3.3V internally
@@ -235,10 +238,21 @@ void handleDPad(int dpad_flags) {
         loadMenu(MENU_MAIN, LENGTH(MENU_MAIN));
         break;
       }
+      case ACTION_SEND:
+      {
+        // TODO validate inputs
+        int size = strlen(menu[0].label) * sizeof(char);
+        char * phonenumber = menu[0].label;
+        char * message = menu[1].label;
+        // call SIM7600
+        sim7600.SendingShortMessage(phonenumber, message);
+        break;
+      }
       case ACTION_ENTRY:
       {
         // clear field for entry
         memset(entry, '\0', LENGTH(entry));
+        //entry[0] = '\0';
         entryMode = true;
         pos = 0;
         break;
