@@ -1,4 +1,4 @@
-#include "Waveshare_SIM7600.h"
+#include "textolib.h"
 #include "AnalogQWERTY.h"
 #include <Wire.h>
 #include <Adafruit_GFX.h>
@@ -42,16 +42,15 @@ int KEYBOARD_PINS[] = { A0, A1, A2 };
 #define DPAD_RIGHT 1
 
 #define ENTRY_BUFFER 256
+#define RESPONSE_BUFFER 2048 
+#define RECORD_BUFFER (75 + 256) * 20 // CMGL header space + message space for a single record
+// +CMGL: ###,"REC UNREAD","+997777777777","$$$$$","23/05/15,13:17:44-16".$MSG
 
 #define STRING_RECIPIENT  "Recipient"
 #define STRING_MESSAGE    "Message"
 
-
-char phone_number[] = "**********";      //********** change it to the phone number you want to call
-char text_message[] = "test";      //
-
 AnalogQWERTY keyboard;
-String command, response;
+String command;
 
 bool refresh, entryMode;
 
@@ -74,32 +73,6 @@ enum {
   ACTION_SEND
 };
 
-struct MenuItem {
-  char* label;
-  int id, action, size;
-};
-
-struct Contact {
-  char* name;
-  char* number;
-};
-
-struct Message {
-  char* body;
-  char* timestamp;
-  Contact sender;
-};
-
-struct Thread {
-  Message* messages;
-  Contact* participants;
-};
-
-Contact contacts[] = {
-  { .name = "Me", .number = "+xxxxxxxxxxx"},
-  { .name = "Dawn", .number = "+xxxxxxxxxxx"}
-};
-
 MenuItem MENU_MAIN[] = {
   { .label = "Messages", MENUITEM_MESSAGES, ACTION_LOAD_MESSAGES, 2 },
   { .label = "Contacts", MENUITEM_CONTACTS, 0, 2 },
@@ -118,10 +91,10 @@ MenuItem MENU_NEWMESSAGE[] = {
   { .label = "Send", MENUITEM_NEWMSG_SEND, ACTION_SEND, 2}
 };
 
-
 MenuItem * menu;
 int menu_index, menu_max;
 char entry[ENTRY_BUFFER]; // SMS supposably has a 160 character limit anyway
+char response[RECORD_BUFFER];
 int pos; // cursor position
 
 void setup() {
@@ -137,7 +110,7 @@ void setup() {
 
   // variable initialization
   command = String("");
-  response = String(F("error"));
+  strcpy(response, "error");
   refresh = true; 
   entryMode = false;
   pos = 0;
@@ -154,24 +127,26 @@ void setup() {
    // SSD1306_SWITCHCAPVCC = generate display voltage from 3.3V internally
   if(!display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS)) {
     Serial.println(F("SSD1306 allocation failed"));
-    //for(;;); // Don't proceed, loop forever
   }
 
   splash();
 
   // keyboard init
   keyboard = AnalogQWERTY();
-  keyboard.init(&KEYBOARD_PINS[0], NUM_KEYPADS);
-
-  delay(100);
+  keyboard.init(KEYBOARD_PINS, NUM_KEYPADS);
   
   // LTE module init
-  sim7600.PowerOn(POWERKEY);
-  sim7600.Initialize(5000);
+  texto.PowerOn(POWERKEY);
+  texto.Initialize(5000);
 
   loadMenu(MENU_MAIN, LENGTH(MENU_MAIN));
 
+  texto.sendATcommand("AT+CMGF=1", "OK", 10000);
+
   Serial.println("initialized");
+  delay(500);
+  Serial.println("loading messages");
+  loadMessages();
 }
 
 void loadMenu(MenuItem* newmenu, int num_items) {
@@ -181,6 +156,35 @@ void loadMenu(MenuItem* newmenu, int num_items) {
   refresh = true;
 }
 
+int getMessageCount() {
+  texto.getATcommandResponse("AT+CPMS?", "CPMS+", response, RECORD_BUFFER, 3000);
+  // +CPMS: "ME",16,255,"ME",16,255,"ME",16,255
+  char* index = strstr(response, "\",");
+  int count = 0;
+  if(index != NULL) {
+    char ascii[3];
+    int i = 0;
+    index+=2;
+    do {
+      ascii[i++] = *(index++);
+    }while(*index != ',');
+    count = atoi(ascii);
+  }
+  return count;
+}
+
+char* loadMessages() {
+  // extract message count from AT+CPMS? response
+  int count = getMessageCount();
+  delay(500);
+  Message ** messagebuffer;
+  if(texto.getMessages("ALL", "+CMGL", messagebuffer, count, 10000) == 0) {
+    strcpy(response, "load message failure");
+  } else {
+    strcpy(response, "load message success");
+  }
+  return response;
+}
 void loop() {
   blink();
 
@@ -241,11 +245,10 @@ void handleDPad(int dpad_flags) {
       case ACTION_SEND:
       {
         // TODO validate inputs
-        int size = strlen(menu[0].label) * sizeof(char);
         char * phonenumber = menu[0].label;
         char * message = menu[1].label;
-        // call SIM7600
-        sim7600.SendingShortMessage(phonenumber, message);
+        // call texto
+        texto.SendingShortMessage(phonenumber, message);
         break;
       }
       case ACTION_ENTRY:
