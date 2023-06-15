@@ -94,7 +94,7 @@ MenuItem MENU_NEWMESSAGE[] = {
 MenuItem * menu;
 int menu_index, menu_max;
 char entry[ENTRY_BUFFER]; // SMS supposably has a 160 character limit anyway
-char response[RECORD_BUFFER];
+char response[RESPONSE_BUFFER];
 int pos; // cursor position
 
 void setup() {
@@ -157,7 +157,7 @@ void loadMenu(MenuItem* newmenu, int num_items) {
 }
 
 int getMessageCount() {
-  texto.getATcommandResponse("AT+CPMS?", "CPMS+", response, RECORD_BUFFER, 3000);
+  texto.getATcommandResponse("AT+CPMS?", "CPMS+", response, RESPONSE_BUFFER, 3000);
   // +CPMS: "ME",16,255,"ME",16,255,"ME",16,255
   char* index = strstr(response, "\",");
   int count = 0;
@@ -173,17 +173,18 @@ int getMessageCount() {
   return count;
 }
 
-char* loadMessages() {
+void loadMessages() {
+  
   // extract message count from AT+CPMS? response
   int count = getMessageCount();
   delay(500);
+
   Message ** messagebuffer;
   if(texto.getMessages("ALL", "+CMGL", messagebuffer, count, 10000) == 0) {
     strcpy(response, "load message failure");
   } else {
     strcpy(response, "load message success");
   }
-  return response;
 }
 void loop() {
   blink();
